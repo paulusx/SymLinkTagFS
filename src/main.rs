@@ -40,28 +40,82 @@ struct FlatFS {
     root_attr: FileAttr,
 }
 
+/// Assign the shortest unambiguous flat name to every file.
+///
+/// Each file starts with depth=1 (just the filename). When two files share
+/// the same candidate name, both have their depth incremented by one
+/// (prepending one more parent directory component). This repeats until
+/// all names are unique.
+///
+/// Example:
+///   "a/foo.txt"       -> "foo.txt"          (unique at depth 1)
+///   "a/x/bar.txt"     -> "bar.txt"          (unique at depth 1)
+///   "a/x/dup.txt" \
+///   "b/x/dup.txt" /   -> "a__x__dup.txt" and "b__x__dup.txt"  (resolved at depth 3)
+fn resolve_display_names(entries: &[(PathBuf, Vec<String>)]) -> Vec<String> {
+    let mut depths = vec![1usize; entries.len()];
+
+    loop {
+        let mut name_to_indices: HashMap<String, Vec<usize>> = HashMap::new();
+        for (i, (_, comps)) in entries.iter().enumerate() {
+            let start = comps.len().saturating_sub(depths[i]);
+            let name = comps[start..].join("__");
+            name_to_indices.entry(name).or_default().push(i);
+        }
+
+        let mut had_conflict = false;
+        for indices in name_to_indices.values() {
+            if indices.len() > 1 {
+                had_conflict = true;
+                for &i in indices {
+                    if depths[i] < entries[i].1.len() {
+                        depths[i] += 1;
+                    }
+                }
+            }
+        }
+
+        if !had_conflict {
+            break;
+        }
+    }
+
+    entries
+        .iter()
+        .zip(&depths)
+        .map(|((_, comps), &depth)| {
+            let start = comps.len().saturating_sub(depth);
+            comps[start..].join("__")
+        })
+        .collect()
+}
+
 impl FlatFS {
     fn new(root: &Path) -> std::io::Result<Self> {
+        // Collect all files with their path components first.
+        let raw: Vec<(PathBuf, Vec<String>)> = WalkDir::new(root)
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_type().is_file())
+            .map(|e| {
+                let real_path = e.path().to_path_buf();
+                let comps = real_path
+                    .strip_prefix(root)
+                    .unwrap()
+                    .components()
+                    .map(|c| c.as_os_str().to_string_lossy().into_owned())
+                    .collect();
+                (real_path, comps)
+            })
+            .collect();
+
+        let display_names = resolve_display_names(&raw);
+
         let mut files: HashMap<u64, FileEntry> = HashMap::new();
         let mut name_to_ino: HashMap<String, u64> = HashMap::new();
         let mut next_ino: u64 = 2;
 
-        for entry in WalkDir::new(root)
-            .into_iter()
-            .filter_map(|e| e.ok())
-            .filter(|e| e.file_type().is_file())
-        {
-            let real_path = entry.path().to_path_buf();
-            let rel = real_path.strip_prefix(root).unwrap();
-
-            // Build a flat name from the relative path: "a/b/c.txt" -> "a__b__c.txt"
-            // This guarantees uniqueness while keeping the name human-readable.
-            let display_name = rel
-                .components()
-                .map(|c| c.as_os_str().to_string_lossy().into_owned())
-                .collect::<Vec<_>>()
-                .join("__");
-
+        for ((real_path, _), display_name) in raw.into_iter().zip(display_names) {
             name_to_ino.insert(display_name.clone(), next_ino);
             files.insert(next_ino, FileEntry { real_path, display_name });
             next_ino += 1;
