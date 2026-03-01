@@ -34,8 +34,13 @@ class Storage(object):
         self.tags = set()
         self.links = set()
 
-    def getContentList(path):
-        tags = path
+    def getContentList(self, path):
+        tags = set(filter(None, path.split('/')))
+        return [link for link in self.links if tags.issubset(link._tags)]
+
+    def remove_all(self):
+        self.tags.clear()
+        self.links.clear()
 
 
 
@@ -139,6 +144,13 @@ class SymbolLinkTagFS(LoggingMixIn, Operations):
     def truncate(self, path, length, fh=None):
         self.data[path] = self.data[path][:length]
         self.files[path]['st_size'] = length
+
+    def remove_all(self):
+        paths = [p for p in self.files if p != '/']
+        for path in paths:
+            self.files.pop(path)
+        self.data.clear()
+        self.files['/']['st_nlink'] = 2
 
     def unlink(self, path):
         self.files.pop(path)
