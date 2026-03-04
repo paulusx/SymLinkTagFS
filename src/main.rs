@@ -2,6 +2,8 @@ use std::path::PathBuf;
 
 use clap::Parser;
 
+mod types;
+
 #[derive(Parser, Debug)]
 #[command(about = "Tag-based filesystem using symlinks")]
 struct Args {
