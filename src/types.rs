@@ -15,13 +15,25 @@ pub struct Item {
 }
 
 // ---------------------------------------------------------------------------
-// Index — discriminated index key; one variant per indexable field plus a
-// free-form Tag(String) for user-supplied labels.
+// Index — category / kind of index key.
+// IndexValue — the concrete lookup value for that category.
+//
+// Database stores: BTreeMap<Index, BTreeMap<IndexValue, BTreeSet<usize>>>
+//   e.g. index[Fs][Fs{inode,dev,rdev}] → positions
+//        index[Tag("foo")][Tag]         → positions
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Index {
     Tag(String),
+    Fs,
+    Location,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum IndexValue {
+    /// Unit — Tag's string is already in the outer Index key.
+    Tag,
     Fs { inode: u64, dev: u64, rdev: u64 },
     Location(PathBuf),
 }
