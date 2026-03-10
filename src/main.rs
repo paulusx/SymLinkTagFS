@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use clap::Parser;
 
+mod db;
 mod types;
 
 #[derive(Parser, Debug)]
