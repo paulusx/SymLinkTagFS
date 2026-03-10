@@ -2,14 +2,14 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use serde::{Deserialize, Serialize};
 
-use crate::types::{Item, Tag};
+use crate::types::{Index, Item};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Database {
     /// Primary storage — insertion order preserved.
     pub items: VecDeque<Item>,
-    /// Tag → set of indices into `items`.
-    pub index: BTreeMap<Tag, BTreeSet<usize>>,
+    /// Index key → set of positions into `items`.
+    pub index: BTreeMap<Index, BTreeSet<usize>>,
 }
 
 impl Database {
